@@ -1,0 +1,26 @@
+[build]
+  publish = "public"
+  functions = "netlify/functions"
+
+[build.environment]
+  # @netlify/blobs requires Node >= 22.12
+  NODE_VERSION = "22"
+
+[functions]
+  node_bundler = "esbuild"
+
+[functions.environment]
+  # Optional: seed the main admin automatically on first run.
+  # If not set, a one-time admin setup screen appears on the site.
+  # ADMIN_USERNAME = "admin"
+  # ADMIN_PASSWORD = "change-me"
+
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/api/:splat"
+  status = 200
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
