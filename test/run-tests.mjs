@@ -1,12 +1,19 @@
-// End-to-end API tests running the handler in-process (file storage in a temp dir).
-import assert from 'node:assert/strict';
-import { mkdtemp, rm } from 'node:fs/promises';
-import os from 'node:os';
-import path from 'node:path';
+// Exercise the real Postgres storage queries against an isolated test database.
+import { randomBytes } from 'node:crypto';
+import { registerHooks } from 'node:module';
+import { testDatabase } from './test-database.mjs';
 
-const base = process.env.TEMP || os.tmpdir();
-const dir = await mkdtemp(path.join(base, 'pocket-fortress-test-'));
-process.env.LEDGER_DATA_DIR = dir;
+// Existing deployment credentials must never seed accounts in the test database.
+delete process.env.ADMIN_USERNAME;
+delete process.env.ADMIN_PASSWORD;
+registerHooks({
+  resolve(specifier, context, nextResolve) {
+    if (specifier === '../db/index.mjs') {
+      return { url: new URL('./test-database.mjs', import.meta.url).href, shortCircuit: true };
+    }
+    return nextResolve(specifier, context);
+  },
+});
 
 const { handleRequest } = await import('../src/handler.mjs');
 
@@ -345,9 +352,40 @@ check('unknown route hides existence when signed out', r.status === 401);
 r = await call('GET', '/api/health');
 check('health endpoint ok', r.status === 200 && r.body.ok === true);
 
+console.log('\n--- database regressions ---');
+const { dbGet, dbSet, dbDel, dbList } = await import('../src/store.mjs');
+await dbSet('test:literal_%', { count: 1 });
+await dbSet('test:literal_other', { count: 2 });
+await dbSet('test:literal_%', { count: 3 });
+check('database upserts replace existing records', (await dbGet('test:literal_%')).count === 3);
+check('prefix search treats SQL wildcards literally', (await dbList('test:literal_%')).length === 1);
+await dbDel('test:literal_%');
+check('deleted records stay deleted', await dbGet('test:literal_%') === null);
+check('storage is database even without NETLIFY flag', r.body.storage === 'database');
+
+// Reproduce first-boot seeding without using configured deployment credentials.
+await testDatabase.exec('TRUNCATE ledger_records');
+process.env.ADMIN_USERNAME = 'seed-test-admin';
+process.env.ADMIN_PASSWORD = randomBytes(24).toString('hex');
+const { handleRequest: seededHandler } = await import('../src/handler.mjs?seed-regression');
+let seededResult = await seededHandler({ path: '/api/state' });
+check('admin bootstrap persists successfully without filesystem access',
+  seededResult.status === 200 && seededResult.body.setupRequired === false);
+seededResult = await seededHandler({ method: 'POST', path: '/api/login',
+  body: { username: process.env.ADMIN_USERNAME, password: process.env.ADMIN_PASSWORD } });
+check('seeded admin credentials allow login', seededResult.status === 200 && seededResult.body.user?.role === 'admin');
+delete process.env.ADMIN_USERNAME;
+delete process.env.ADMIN_PASSWORD;
+
+await testDatabase.exec('DROP TABLE ledger_records');
+for (const endpoint of ['/api/state', '/api/health']) {
+  const failure = await seededHandler({ path: endpoint });
+  check(`storage outage returns a controlled error for ${endpoint}`, failure.status === 500 && failure.body.error === 'Server error. Please try again.');
+}
+
 /* -------------------------------------------------------------- summary */
 
-await rm(dir, { recursive: true, force: true });
+await testDatabase.close();
 console.log(`\n${passed} passed, ${failed} failed\n`);
 if (failed > 0) {
   console.log('Failing checks:');

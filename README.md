@@ -28,22 +28,23 @@ logged once, when it arrives, and is never repeated or estimated automatically.
 
 ```bash
 npm install
-npm run dev
+netlify dev --port 8889
 ```
 
-Then open **http://localhost:8787**.
+Then open **http://localhost:8889**.
 
 The console also prints a **Network** URL (e.g. `http://192.168.100.46:8787`) — open
 that on your phone while on the same Wi-Fi and everyone signs in with their own account.
 
-> Local data is stored in `.data/ledger.json` (git-ignored). Delete that folder to
-> start over.
+> Persistent data uses Netlify Database. Use Netlify CLI local development to connect
+> to the managed development database.
 
 ## Deploy on Netlify (recommended)
 
 The site is a static front end + one serverless API function, and data lives in
-**Netlify Blobs** — no external database to sign up for; it is included with every
-Netlify site.
+**Netlify Database** (managed Postgres). The schema is defined in `db/schema.ts`;
+migrations in `netlify/database/migrations/` are applied automatically during deployment.
+The API never writes application data to the function filesystem.
 
 **Important:** do not use plain drag-and-drop upload — it publishes only the static
 files and skips the API function. Use one of these two routes:
@@ -92,7 +93,7 @@ its first visit:
 npm test
 ```
 
-81 checks cover setup, login, lockout, sessions, the one-time income rule, amounts and
+The checks use an isolated Postgres test engine and cover setup, login, lockout, sessions, the one-time income rule, amounts and
 dates, privacy between users, categories, budgets, settings, admin controls, and
 security guards (cross-origin posts, forged cookies, Secure-cookie handling on
 HTTPS vs LAN).
@@ -108,7 +109,7 @@ public/                 Front-end (no build step): app, views, styles
   styles.css            Responsive design (sidebar on desktop, tabs on mobile)
 src/
   handler.mjs           The whole API: auth, transactions, budgets, admin…
-  store.mjs             Netlify Blobs on Netlify, JSON file locally
+  store.mjs             Netlify Database storage
   auth.mjs              scrypt password hashing, session tokens
 netlify/functions/api.mjs   Serverless entry point (thin adapter)
 server.mjs              Local dev server (static + API on one origin)
@@ -132,4 +133,4 @@ netlify.toml            Netlify build + /api/* redirect
 - **Phone can't stay signed in on the local server** — make sure you are using the
   printed `http://<LAN-IP>:8787` URL as a whole and that your browser accepts cookies
   for it (the app switches cookies to non-Secure mode automatically for LAN HTTP).
-- **Want a fresh start locally** — stop the server and delete `.data/`.
+- **Database errors** — check the API function logs and confirm deployment migrations completed.
