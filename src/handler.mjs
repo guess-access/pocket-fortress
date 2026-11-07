@@ -593,42 +593,45 @@ export async function handleRequest({ method = 'GET', path = '/', query = {}, bo
     const q = query || {};
 
     // ---- public routes
-    if (verb === 'GET' && p === '/state') return routeState(headers);
-    if (verb === 'GET' && p === '/health') return ok({ ok: true, storage: storageMode() });
-    if (verb === 'POST' && p === '/setup') return routeSetup(body, headers);
-    if (verb === 'POST' && p === '/login') return routeLogin(body, headers);
+    if (verb === 'GET' && p === '/state') return await routeState(headers);
+    if (verb === 'GET' && p === '/health') {
+      await dbGet('users');
+      return ok({ ok: true, storage: storageMode() });
+    }
+    if (verb === 'POST' && p === '/setup') return await routeSetup(body, headers);
+    if (verb === 'POST' && p === '/login') return await routeLogin(body, headers);
 
     // ---- authenticated routes
     const auth = await resolveSession(headers);
     if (!auth) return fail(401, 'Please sign in.');
 
-    if (verb === 'POST' && p === '/logout') return routeLogout(auth, headers);
-    if (verb === 'POST' && p === '/password') return routeChangePassword(auth, body);
-    if ((verb === 'GET' || verb === 'PUT') && p === '/settings') return routeSettings(auth, verb, body);
+    if (verb === 'POST' && p === '/logout') return await routeLogout(auth, headers);
+    if (verb === 'POST' && p === '/password') return await routeChangePassword(auth, body);
+    if ((verb === 'GET' || verb === 'PUT') && p === '/settings') return await routeSettings(auth, verb, body);
 
     if ((verb === 'GET' || verb === 'POST') && p === '/transactions') {
-      return routeTransactions(auth, verb, null, q, body);
+      return await routeTransactions(auth, verb, null, q, body);
     }
     let m = p.match(/^\/transactions\/([a-f0-9]{24})$/);
-    if (m) return routeTransactions(auth, verb, m, q, body);
+    if (m) return await routeTransactions(auth, verb, m, q, body);
 
     if ((verb === 'GET' || verb === 'POST') && p === '/categories') {
-      return routeCategories(auth, verb, null, body);
+      return await routeCategories(auth, verb, null, body);
     }
     m = p.match(/^\/categories\/([a-f0-9]{24})$/);
-    if (m) return routeCategories(auth, verb, m, body);
+    if (m) return await routeCategories(auth, verb, m, body);
 
-    if ((verb === 'GET' || verb === 'PUT') && p === '/budgets') return routeBudgets(auth, verb, q, body);
+    if ((verb === 'GET' || verb === 'PUT') && p === '/budgets') return await routeBudgets(auth, verb, q, body);
 
     if ((verb === 'GET' || verb === 'POST') && p === '/admin/users') {
-      return routeAdminUsers(auth, verb, null, body);
+      return await routeAdminUsers(auth, verb, null, body);
     }
     m = p.match(/^\/admin\/users\/([a-z0-9._-]{3,24})$/);
-    if (m) return routeAdminUsers(auth, verb, m, body);
+    if (m) return await routeAdminUsers(auth, verb, m, body);
 
     return fail(404, 'Not found.');
   } catch (err) {
-    console.error('[pocket-fortress] request failed:', err);
+    console.error('[pocket-fortress] API request failed. Check database availability and migrations.');
     return fail(500, 'Server error. Please try again.');
   }
 }

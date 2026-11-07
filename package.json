@@ -7,12 +7,17 @@
   "scripts": {
     "dev": "node server.mjs",
     "start": "node server.mjs",
-    "test": "node test/run-tests.mjs"
+    "test": "node --experimental-strip-types test/run-tests.mjs"
   },
   "dependencies": {
-    "@netlify/blobs": "^11.1.7"
+    "@netlify/database": "^2.0.3",
+    "drizzle-orm": "^1.0.0-beta.22"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22.15"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.2.17",
+    "drizzle-kit": "^1.0.0-beta.22"
   }
 }
